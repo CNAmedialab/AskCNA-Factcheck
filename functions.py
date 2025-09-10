@@ -5,6 +5,8 @@ from requests import post
 from openai import OpenAI
 from elasticsearch import Elasticsearch
 import os
+from openai import OpenAI
+from pydantic import BaseModel
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -91,58 +93,24 @@ def get_check_points(text, media_name=None):
         }
 
 
-### 改成用embedding搜elastic search
-def checkTFC(text):
-    print("-"*10, "TFC報告資料", "-"*10)
-    start_time = time.time()
-    url_api = "http://dt.cna.com.tw:10000/CopyToaster/API/"
-    payload = {
-        "project": "FactCheck",
-        "category": "tfc",
-        "copytoaster_key": "",
-        "input_str": text,
-        "count": 5
-    }
+### Openai 判斷es結果跟text的相關性
+def detect_relation(text, summary):
+    client = OpenAI()
 
-    try:
-        response = post(url_api, json=payload)
-        if response.status_code != 200:
-            print(f"[ERROR] TFC API 回應錯誤: {response.status_code}")
-            return []
+    class Relation(BaseModel):
+        relation: bool
 
-        data = response.json()
-        if 'result_list' not in data or not data['result_list']:
-            print("[INFO] TFC 無查核結果")
-            return []
+    response = client.responses.parse(
+        model="gpt-4.1",
+        input=[
+            {"role": "system", "content": "判斷參考資料與要做事時查核的文本的相關性。考慮人物、地點、時間、事件等要素。回傳布林值：相關=true，不相關=false。"},
+            {"role": "user", "content": f"參考資料：{summary}\n要做事時查核的文本：{text}\n請回答兩者的相關性。"},
+        ],
+        text_format=Relation,
+    )
 
-        result_list = data['result_list']
-
-        formatted_list = []
-        for item in result_list:
-            try:
-                content = item.get('document', '')
-                article = content.replace("TFC_data_0226>>", "").replace("\n", "")
-                parts = re.split(r'[|]', item.get('title', '未知標題|未知日期|未知URL'))
-                data = ({
-                    "data_type": "TFC",
-                    "title": parts[0] if len(parts) > 0 else "未知標題",
-                    "date": parts[1] if len(parts) > 1 else "未知日期",
-                    "article": article,
-                    "url": parts[2] if len(parts) > 2 else "未知URL"
-                })
-
-                formatted_list.append(data)
-
-            except Exception as e:
-                print(f"[ERROR] 處理 TFC 單筆資料錯誤: {e}")
-                continue
-
-        end_time = time.time()
-        print(f"TFC查核耗時: {end_time - start_time:.2f} 秒")
-        return formatted_list
-    except Exception as e:
-        print(f"[ERROR] TFC 查核 API 錯誤: {e}")
-        return []
+    answer = response.output_parsed.relation
+    return answer
 
 ## 用es搜社稿跟查核中心報告
 def es_resources(text):
@@ -151,13 +119,14 @@ def es_resources(text):
 
     # es search CNA
     start_time = time.time()
+    print("[Info] 正在搜尋中央社社稿")
     cna_res = es_vector_search(es, index="lab_mainsite_search", embedding_column_name="embeddings",
                               input_embedding=text_embedding, recall_size=10)
 
     cna_news = []
     if cna_res:
         try:
-            print(f"找到 {len(cna_res)} 筆社稿資料")
+            print(f"[Info] 找到 {len(cna_res)} 筆社稿資料")
             for item in cna_res:
                 source = item['_source']
                 data = ({
@@ -168,7 +137,13 @@ def es_resources(text):
                         "summary": source.get('whatHappen200', ''),
                         "url": f"https://www.cna.com.tw/news/aall/{source.get('pid', '')}.aspx"
                 })
-                cna_news.append(data)
+
+                # 相關性檢查
+                if detect_relation(text, source.get('whatHappen200', '')) == True:
+                    cna_news.append(data)
+                    print(f"\n >>> 有相關，加入：{source.get('h1', '')}")
+                else:
+                    print(f"\n >>> 不相關，跳過：{source.get('h1', '')} ")
 
         except Exception as e:
             print(f"[Error] 查詢社稿資料過程發生錯誤: {str(e)}")
@@ -178,25 +153,33 @@ def es_resources(text):
         print("未找到相似CNA社稿資料。")
 
     # es search TFC
+    print("[Info] 正在搜尋查核中心報告")
     tfc_res = es_vector_search(es, index="lab_tfc_search_test", embedding_column_name="embeddings",
                               input_embedding=text_embedding, recall_size=10)
 
     tfc_report = []
     if tfc_res:
         try:
-            print(f"找到 {len(tfc_res)} 筆查核中心報告資料")
+            print(f"[Info] 找到 {len(tfc_res)} 筆查核中心報告資料")
             for item in tfc_res:
+                source = item['_source']
                 data = ({
                     "data_type": "TFC",
-                    "title": item.get('title', ''),
-                    "date": item.get('date', '').replace('/', '-'),
-                    "article": item.get('full_content', ''),
-                    "summary": item.get('summary', ''),
-                    "label": item.get('label', ''),
-                    "url": item.get('link', ''),
+                    "title": source.get('title', ''),
+                    "date": source.get('date', '').replace('/', '-'),
+                    "article": source.get('full_content', ''),
+                    "summary": source.get('summary', ''),
+                    "label": source.get('label', ''),
+                    "url": source.get('link', ''),
 
                 })
-                tfc_report.append(data)
+
+                # 如果summary跟text有關係才加入
+                if detect_relation(text, source.get('summary', '')) == True:
+                    tfc_report.append(data)
+                    print(f"\n >>> 有相關，加入：{source.get('title', '')}")
+                else:
+                    print(f"\n >>> 不相關，跳過：{source.get('title', '')}")
 
         except Exception as e:
             print(f"[Error] 查詢查核中心報告資料過程發生錯誤: {str(e)}")
@@ -208,7 +191,7 @@ def es_resources(text):
     # return
     all_resources = cna_news + tfc_report
     end_time = time.time()
-    print(f"ES搜參考資料耗時: {end_time - start_time:.2f} 秒")
+    print(f"[Debug] ES查詢耗時: {end_time - start_time:.2f} 秒")
     return all_resources
 
 
@@ -222,7 +205,7 @@ if __name__ == "__main__":
         print(check_points)
     else:
         check_points = None
-        print(">>> [Info] 查核點 API 失敗")
+        print("[Info] 查核點 API 失敗")
 
     resources = es_resources(text)
-    print(resources)
+    print(f"[Info] 最終有{len(resources)}筆參考資料")
