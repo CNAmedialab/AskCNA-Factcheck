@@ -3,7 +3,7 @@ import re
 import requests
 from requests import post
 from openai import OpenAI
-from elasticsearch import Elasticsearch
+from es_SearchLib import es_vector_search, es
 import os
 from openai import OpenAI
 from pydantic import BaseModel
@@ -19,36 +19,9 @@ def text_embeddings_3(text):
     t = client.embeddings.create(model="text-embedding-3-large", input=text)
     return t.data[0].embedding
 
-### Vector Search
-### 純粹向量搜尋
-es_username = os.getenv("es_username")
-es_password = os.getenv("es_password")
-
-es = Elasticsearch(
-    "https://media-vector.es.asia-east1.gcp.elastic-cloud.com", 
-    basic_auth=(es_username, es_password), 
-    request_timeout=200
-)
-
-def es_vector_search(es, index, embedding_column_name, input_embedding, recall_size=10):
-    query = {
-        "size": recall_size,
-        "query": {
-            "script_score": {
-                "query": {"match_all": {}},
-                "script": {
-                    "source": f"cosineSimilarity(params.query_vector, '{embedding_column_name}') + 1.0",
-                    "params": {"query_vector": input_embedding}
-                }
-            }
-        }
-    }
-    response = es.search(index=index, **query)
-    return response['hits']['hits']
-
 ### 查核點api
 def get_check_points(text, media_name=None):
-    print(f">>> [Info] 開始取得查核點")
+    print(f"[Info] 查核點評估...")
     input = {
         "text": text,
         "media_name": media_name
@@ -65,27 +38,28 @@ def get_check_points(text, media_name=None):
             check_points = response_json["ResultData"].get("check_points", [])
 
             if check_points:
-                print(f">>> [Info] 成功取得查核點")
+                print(f"[Info] 成功取得查核點")
+                print(f">>>{check_points}")
                 end_time = time.time()
-                print(f">>> [Info] 查核點API耗時: {end_time - start_time:.2f} 秒")
+                print(f"[Info] 查核點API耗時: {end_time - start_time:.2f} 秒")
                 return {
                     "Result": "Y",
                     "ResultData": {"check_points": check_points},
                     "Message": "API成功回傳結果"
                 }
             else:
-                print(f">>> [Info] 查核點為空")
+                print(f"[Info] 查核點為空")
                 end_time = time.time()
-                print(f">>> [Info] 查核點API耗時: {end_time - start_time:.2f} 秒")
+                print(f"[Info] 查核點API耗時: {end_time - start_time:.2f} 秒")
                 return {
                     "Result": "N",
                     "ResultData": {"check_points": None},
                     "Message": "查核點為空"
                 }
     else:
-        print(f">>> [Error] 取得查核點時發生錯誤：{response.status_code}")
+        print(f"[Error] 取得查核點時發生錯誤：{response.status_code}")
         end_time = time.time()
-        print(f">>> [Info] 查核點API耗時: {end_time - start_time:.2f} 秒")
+        print(f"[Info] 查核點API耗時: {end_time - start_time:.2f} 秒")
         return {
             "Result": "N",
             "ResultData": {"check_points": None},
@@ -94,7 +68,7 @@ def get_check_points(text, media_name=None):
 
 
 ### Openai 判斷es結果跟text的相關性
-def detect_relation(text, summary):
+def es_relation(text, summary):
     client = OpenAI()
 
     class Relation(BaseModel):
@@ -103,7 +77,7 @@ def detect_relation(text, summary):
     response = client.responses.parse(
         model="gpt-4.1",
         input=[
-            {"role": "system", "content": "判斷參考資料與要做事時查核的文本的相關性。考慮人物、地點、時間、事件等要素。回傳布林值：相關=true，不相關=false。"},
+            {"role": "system", "content": "判斷參考資料與要做事時查核的文本的相關性。優先考慮事件、時間、人物、地點的相關性。回傳布林值：相關=true，不相關=false。"},
             {"role": "user", "content": f"參考資料：{summary}\n要做事時查核的文本：{text}\n請回答兩者的相關性。"},
         ],
         text_format=Relation,
@@ -113,7 +87,7 @@ def detect_relation(text, summary):
     return answer
 
 ## 用es搜社稿跟查核中心報告
-def es_resources(text):
+def es_resources(text): 
     # embedding input
     text_embedding = text_embeddings_3(text)
 
@@ -139,7 +113,7 @@ def es_resources(text):
                 })
 
                 # 相關性檢查
-                if detect_relation(text, source.get('whatHappen200', '')) == True:
+                if es_relation(text, source.get('whatHappen200', '')) == True:
                     cna_news.append(data)
                     print(f"\n >>> 有相關，加入：{source.get('h1', '')}")
                 else:
@@ -155,7 +129,7 @@ def es_resources(text):
     # es search TFC
     print("[Info] 正在搜尋查核中心報告")
     tfc_res = es_vector_search(es, index="lab_tfc_search_test", embedding_column_name="embeddings",
-                              input_embedding=text_embedding, recall_size=10)
+                              input_embedding=text_embedding, recall_size=5)  ## 查核告有時候很舊, 只找5筆
 
     tfc_report = []
     if tfc_res:
@@ -175,7 +149,7 @@ def es_resources(text):
                 })
 
                 # 如果summary跟text有關係才加入
-                if detect_relation(text, source.get('summary', '')) == True:
+                if es_relation(text, source.get('summary', '')) == True:
                     tfc_report.append(data)
                     print(f"\n >>> 有相關，加入：{source.get('title', '')}")
                 else:
