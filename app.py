@@ -285,7 +285,6 @@ class StreamlitFactCheckBot:
                     improvement_question
                 )
 
-            st.markdown(f"**第{st.session_state.round_num-1}輪對話結果**")
             draft = st.write_stream(improvement_generator())
 
         st.session_state.current_draft = draft
