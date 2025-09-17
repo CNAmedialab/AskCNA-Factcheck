@@ -6,10 +6,8 @@ import streamlit as st
 import asyncio
 from functions import get_check_points, es_resources
 from agentic import (
-    generate_explanation,
     generate_explanation_streaming,
     run_question_review,
-    final_report_agent,
     final_report_agent_streaming
 )
 from datetime import datetime
@@ -179,8 +177,6 @@ class StreamlitFactCheckBot:
                         generate_explanation_streaming,
                         user_input, check_points, resources, ""
                     )
-
-                st.markdown("**初步查核結果**")
                 draft = st.write_stream(explanation_generator())
 
         st.session_state.current_draft = draft
@@ -188,7 +184,7 @@ class StreamlitFactCheckBot:
         # 記錄查核解釋結果
         st.session_state.messages.append({
             "role": "assistant",
-            "content": f"{draft}"
+            "content": f"**初步查核結果**\n\n{draft}"
         })
 
         # 步驟4: AI評估
@@ -278,7 +274,7 @@ class StreamlitFactCheckBot:
 
         # 根據改善問題重新生成查核結果
         with st.chat_message("assistant"):
-            st.markdown(f"✨ **第{st.session_state.round_num+1}輪改善結果**")
+            st.markdown(f"✨ **第{st.session_state.round_num+1}輪對話結果**")
 
             def improvement_generator():
                 return create_streaming_generator(
