@@ -8,6 +8,8 @@ import os
 from openai import OpenAI
 from pydantic import BaseModel
 from dotenv import load_dotenv
+from datetime import timedelta, datetime
+from dateutil.relativedelta import relativedelta
 
 load_dotenv()
 
@@ -168,11 +170,45 @@ def es_resources(text):
     print(f"[Debug] ES查詢耗時: {end_time - start_time:.2f} 秒")
     return all_resources
 
+### 日期置換 ###
+def date_noun_converter(text):
+    print(f"[Info] 時間置換")
+    story_dt = datetime.now()
+    # 按照長度排序，較長的詞彙先處理，避免重複替換問題
+    date_nouns = [
+        ('明後天', lambda dt: f"明後天（{dt+timedelta(days=1):%Y年%m月%d日}、{dt+timedelta(days=2):%Y年%m月%d日}）"),
+        ('上個月', lambda dt: f"上個月（{dt + relativedelta(months=-1):%m月}）"),
+        ('下個月', lambda dt: f"下個月（{dt + relativedelta(months=+1):%m月}）"),
+        ('這個月', lambda dt: f"這個月（{dt:%m月}）"),
+        ('本月', lambda dt: f"本月{dt:%m月}"),
+        ('當月', lambda dt: f"當月{dt:%m月}"),
+        ('前天', lambda dt: f"前天（{dt+timedelta(days=-2):%Y年%m月%d日}）"),
+        ('昨天', lambda dt: f"昨天（{dt+timedelta(days=-1):%Y年%m月%d日}）"),
+        ('今天', lambda dt: f"今天（{dt:%Y年%m月%d日}）"),
+        ('今日', lambda dt: f"今日（{dt:%Y年%m月%d日}）"),
+        ('今晚', lambda dt: f"今晚（{dt:%Y年%m月%d日}）"),
+        ('今早', lambda dt: f"今早（{dt:%Y年%m月%d日}）"),
+        ('明天', lambda dt: f"明天（{dt+timedelta(days=1):%Y年%m月%d日}）"),
+        ('後天', lambda dt: f"後天（{dt+timedelta(days=2):%Y年%m月%d日}）"),
+        ('今年', lambda dt: f"今年（{dt:%Y年}）"),
+        ('去年', lambda dt: f"去年（{dt + relativedelta(years=-1):%Y年}）"),
+        ('明年', lambda dt: f"明年（{dt + relativedelta(years=1):%Y年}）"),
+        ('本月', lambda dt: f"本月{dt:%m月}"),
+    ]
+
+    converted_text = text
+    for key, func in date_nouns:
+        converted_text = converted_text.replace(key, func(story_dt))
+    return converted_text
+
 
 if __name__ == "__main__":
-    text = "日本首相石破茂宣布辭去自民黨總裁（黨主席）職務後，日圓聞訊走貶，加上投資人預期新政府將推出新的經濟對策，日股今天應聲上漲。"
+    text = "勞動部勞工保險局今天宣布，從明天開始陸續發放國民年金生育保險給付，女性皆可領取3萬9522元，提醒民眾儘速透過網路銀行或存摺明細確認款項，確認是否到帳。"
+
+    text_converted = date_noun_converter(text)
+    print(f">>> 時間置換後query:\n{text_converted}")
     
-    check_points_list = get_check_points(text, media_name="Chiming")
+    check_points_list = get_check_points(text_converted, media_name="Chiming")
     
     if check_points_list["Result"] == "Y":
         check_points = check_points_list["ResultData"]["check_points"]

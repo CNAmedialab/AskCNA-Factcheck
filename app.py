@@ -4,7 +4,7 @@
 """
 import streamlit as st
 import asyncio
-from functions import get_check_points, es_resources
+from functions import get_check_points, es_resources, date_noun_converter
 from agentic import (
     generate_explanation_streaming,
     run_question_review,
@@ -113,8 +113,6 @@ class StreamlitFactCheckBot:
         st.session_state.round_num = 1
         st.session_state.history = []
         st.session_state.ai_suggested_question = None
-
-        print(f"====> 開始對話：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
         # 步驟1: 分析查核點
         with st.spinner("🔍 正在分析查核點..."):
@@ -602,39 +600,48 @@ def main():
             except Exception as e:
                 st.error(f"❌ 處理選擇時發生錯誤: {str(e)}")
 
-    elif st.session_state.fact_check_state == "waiting_custom_question":
-        # 等待用戶輸入自定義問題
-        if custom_question := st.chat_input("請輸入您的問題..."):
-            with st.chat_message("user"):
-                st.markdown(custom_question)
-            st.session_state.messages.append({"role": "user", "content": custom_question})
-
-            try:
-                bot.continue_with_question(custom_question, "用戶輸入")
-                st.rerun()
-            except Exception as e:
-                st.error(f"❌ 處理問題時發生錯誤: {str(e)}")
-
     elif st.session_state.fact_check_state == "completed":
         pass
 
-    # 聊天輸入 - 只在沒有進行中的查核時顯示
-    elif st.session_state.fact_check_state is None:
-        if prompt := st.chat_input("請輸入要查核的新聞或消息..."):
-            with st.chat_message("user"):
-                st.markdown(prompt)
-            st.session_state.messages.append({"role": "user", "content": prompt})
+    # 聊天輸入 - 根據狀態顯示不同提示文字，但始終顯示
+    input_placeholder = "請輸入要查核的新聞或消息..."
 
-            try:
-                bot.start_fact_check(prompt)
+    if st.session_state.fact_check_state == "waiting_custom_question":
+        input_placeholder = "請輸入您的問題..."
+    elif st.session_state.fact_check_state == "completed":
+        input_placeholder = "開始新的查核..."
+
+    if prompt := st.chat_input(input_placeholder):
+        with st.chat_message("user"):
+            st.markdown(prompt)
+        st.session_state.messages.append({"role": "user", "content": prompt})
+
+        try:
+            if st.session_state.fact_check_state == "waiting_custom_question":
+                # 處理自定義問題
+                bot.continue_with_question(prompt, "用戶輸入")
                 st.rerun()
-            except Exception as e:
+            elif st.session_state.fact_check_state == "completed" or st.session_state.fact_check_state is None:
+                # 開始新的查核流程 - 只在這時打印開始對話時間戳
+                print(f"====> 開始新的查核對話：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                converted_text = date_noun_converter(prompt)
+                bot.start_fact_check(converted_text)
+                st.rerun()
+            else:
+                # 其他狀態下的輸入，可以提示用戶當前狀態
                 with st.chat_message("assistant"):
-                    st.error(f"❌ 查核過程發生錯誤: {str(e)}")
+                    st.markdown("請先完成當前的選擇或等待處理完成。")
                 st.session_state.messages.append({
                     "role": "assistant",
-                    "content": f"❌ 抱歉，查核過程發生錯誤: {str(e)}"
+                    "content": "請先完成當前的選擇或等待處理完成。"
                 })
+        except Exception as e:
+            with st.chat_message("assistant"):
+                st.error(f"❌ 處理時發生錯誤: {str(e)}")
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": f"❌ 抱歉，處理時發生錯誤: {str(e)}"
+            })
 
 if __name__ == "__main__":
     main()

@@ -246,7 +246,7 @@ async def generate_explanation_streaming(user_input, check_points, resources, qu
 
 <draft_example>
 **查核結果: 錯誤**\n\n
-高雄興達電廠火災意外，引發全國關注，台電啟用多部緊備機組發電。網路流傳，「電不夠時，靠核二核三當救援投手」，並附核電廠發電量擷圖佐證。經查，根據台電官網和相關報導，發電的是核電廠內的輕油氣渦輪機組，並非核電。台電官網清楚註明為核電廠內的「輕油」機組，但傳言擷取片段資訊，誤導稱為核電廠發電。台電發言人表示，因興達電廠意外啟用輕油氣渦輪機組發電，這是電力調度措施，與核電無關。核工學者也證實氣渦輪發電機雖設於核電廠內，但屬於獨立發電系統。此外，核電廠重新開機需要複雜程序和2天時間，無法作為緊急電力調度。因此傳言內容為引人誤解的訊息。
+高雄興達電廠火災意外，引發全國關注，台電啟用多部緊備機組發電。網路流傳，「電不夠時，靠核二核三當救援投手」，並附核電廠發電量擷圖佐證。經查，根據台電官網和相關報導，發電的是核電廠內的輕油氣渦輪機組，並非核電。台電官網清楚註明為核電廠內的「輕油」機組，但傳言擷取片段資訊，誤導稱為核電廠發電。
 </draft_example>
 """
     explain_agent = Agent(
@@ -286,23 +286,25 @@ async def final_report_agent(history: str, check_points: str, user_input: str, r
 
 <task>
 你要負責根據history的問答紀錄，撰寫最終版本的查核結果報告。
-最終報告應該包含：查核結果(tag)、查核結果說明(explanation)、資料來源(resources)。
+最終報告應該包含：查核結果(tag)、查核結果說明(explanation)、佐證資料(resources)。
 - tag：錯誤/部分錯誤/正確/證據不足。請根據history當中的解釋來判斷。
 - explanation：查核結果說明，必須以證據資料佐證。請再一次複查resources的內容，確保查核解釋的說法是正確的、完整的、符合證據資料內容。
 - resources：撰寫explanation時，所使用的證據資料的url。請一定要列出正確的url。禁止超出resources的範圍。
 
 請特別注意"提問"，這通常是使用者最疑惑的地方。必須針對提問做出相對應的解釋和回應。
 如果resources當中的相關資料無法佐證，請老實說「證據資料不足，無法查證。」
+
+請以懶人包的敘事方法，想像你是在跟高中生、大學生或老人家解釋一個錯誤資訊、釐清對方給的資訊、提供正確資訊，用字遣詞必須淺白易懂。
 </task>
 
 <output_format>
 按照以下結構輸出查核結果：
 **查證結果：[tag]**
 
-分段敘述查核結果，每段之間用空行分隔。建議寫1-3段。
-每一段後面都要標註參考資料編號，以[1]、[2]、[3]來標註，如果有多筆請以","分隔。
+分段敘述查核結果，每段之間用空行分隔。建議寫1-3段。總共不要超過300個字。
+每一段後面都要標註佐證資料編號，以[1]、[2]、[3]來標註，如果有多筆請以","分隔。
 
-參考資料：
+佐證資料：
 [1]: URL1\n
 [2]: URL2\n
 [3]: URL3\n
@@ -319,14 +321,12 @@ async def final_report_agent(history: str, check_points: str, user_input: str, r
 
 傳言提到的時速 80 公里行駛於限速 40 公里的匝道，屬於「嚴重超速」，罰則內容大致無誤，不過國道警察於 2025 年 7 月 19 日在南投服務區取締的 4 件超速，皆非「嚴重超速」案例，且取締的地點是在南投服務區「內」的道路，不是高速公路或快速道路，因此是以《道交條例》第 40 條，處 1,200 元以上、2,400 元以下罰鍰，而非以第 33 條「高速公路或快速道路超速」（3,000 元以上、6,000 元以下）或第 43 條「嚴重超速」（6,000 元以上、36,000 元以下）開罰。[1]
 
-國道警方於 7 月 19 日在南投服務區「內」取締 4 件超速，依《道交條例》第 40 條開罰 1,200 元以上、2,400 元以下罰鍰。[2]
+警方除了例假日編排路檢勤務，也在進入服務區主要車道分流處（匝道）及中寮便道匯流處加強超速取締，並依法設立「警52」標誌提醒駕駛人。警方於 7 月 19 日夜間，在南投服務區取締超速 4 件，依《道路交通管理處罰條例》第 40 條規定，處 1,200 元以上、2,400 元以下罰鍰。[1],[3]
 
-報導指出，警方除了例假日編排路檢勤務，也在進入服務區主要車道分流處（匝道）及中寮便道匯流處加強超速取締，並依法設立「警52」標誌提醒駕駛人。警方於 7 月 19 日夜間，在南投服務區取締超速 4 件，依《道路交通管理處罰條例》第 40 條規定，處 1,200 元以上、2,400 元以下罰鍰。[1],[3]
-
-參考資料：\n\n
-[1]: https://www.cna.com.tw/news/aall/202509110109.aspx \n
-[2]: https://www.cna.com.tw/news/aall/202509090405.aspx \n
-[3]: https://www.cna.com.tw/news/aall/202508300207.aspx \n
+佐證資料：\n\n
+[1]: 一句話這一個證據內容 (可以直接貼上resources的title) https://www.cna.com.tw/news/aall/202509110109.aspx \n
+[2]: 一句話這一個證據內容 https://www.cna.com.tw/news/aall/202509090405.aspx \n
+[3]: 一句話這一個證據內容 https://www.cna.com.tw/news/aall/202508300207.aspx \n
 </output example>
 """
     )
@@ -370,6 +370,7 @@ async def final_report_agent_streaming(history: str, check_points: str, user_inp
 最終報告應該包含：查核結果(tag)、查核結果說明(explanation)、資料來源(resources)。
 - tag：錯誤/部分錯誤/正確/證據不足。請根據history當中的解釋來判斷。
 - explanation：查核結果說明，必須以證據資料佐證。請再一次複查resources的內容，確保查核解釋的說法是正確的、完整的、符合證據資料內容。
+**請用懶人包的敘事方法，想像你是在跟高中生、大學生或老人家用手機通訊軟體或社群媒體解釋一個錯誤資訊、釐清對方給的資訊、提供正確資訊，所以用字遣詞必須淺白易懂，而且在開頭就必須明確說明正確性與否，但是不可以太過情緒性。**
 - resources：撰寫explanation時，所使用的證據資料的url。請一定要列出正確的url。禁止超出resources的範圍。
 
 請特別注意"提問"，這通常是使用者最疑惑的地方。必須針對提問做出相對應的解釋和回應。
@@ -381,9 +382,9 @@ async def final_report_agent_streaming(history: str, check_points: str, user_inp
 **查證結果：[tag]**
 
 分段敘述查核結果，每段之間用空行分隔。建議寫1-3段。
-每一段後面都要標註參考資料編號，以[1]、[2]、[3]來標註，如果有多筆請以","分隔。
+每一段後面都要標註佐證資料編號，以[1]、[2]、[3]來標註，如果有多筆請以","分隔。
 
-參考資料：
+佐證資料：
 [1]: URL1
 [2]: URL2
 [3]: URL3
@@ -395,21 +396,17 @@ async def final_report_agent_streaming(history: str, check_points: str, user_inp
 4. 不可使用resources中沒有的URL
 </output_format>
 
-<output_example>
+<output_format_example>
 **查證結果：錯誤**
 
-傳言提到的時速 80 公里行駛於限速 40 公里的匝道，屬於「嚴重超速」，罰則內容大致無誤，不過國道警察於 2025 年 7 月 19 日在南投服務區取締的 4 件超速，皆非「嚴重超速」案例，且取締的地點是在南投服務區「內」的道路，不是高速公路或快速道路，因此是以《道交條例》第 40 條，處 1,200 元以上、2,400 元以下罰鍰，而非以第 33 條「高速公路或快速道路超速」（3,000 元以上、6,000 元以下）或第 43 條「嚴重超速」（6,000 元以上、36,000 元以下）開罰。[1]
 
-國道警方於 7 月 19 日在南投服務區「內」取締 4 件超速，依《道交條例》第 40 條開罰 1,200 元以上、2,400 元以下罰鍰。[2]
-
-報導指出，警方除了例假日編排路檢勤務，也在進入服務區主要車道分流處（匝道）及中寮便道匯流處加強超速取締，並依法設立「警52」標誌提醒駕駛人。警方於 7 月 19 日夜間，在南投服務區取締超速 4 件，依《道路交通管理處罰條例》第 40 條規定，處 1,200 元以上、2,400 元以下罰鍰。[1],[3]
 
 參考資料：
 
 [1]: https://www.cna.com.tw/news/aall/202509110109.aspx
 [2]: https://www.cna.com.tw/news/aall/202509090405.aspx
 [3]: https://www.cna.com.tw/news/aall/202508300207.aspx
-</output example>
+</output_format_example>
 """
     )
 
@@ -556,7 +553,6 @@ async def run_interactive_fact_check(user_input, check_points, resources, max_ro
             resources=resources
         )
 
-
     return {
         "final_report": final_report,
         "interaction_history": history,
@@ -564,23 +560,22 @@ async def run_interactive_fact_check(user_input, check_points, resources, max_ro
     }
 
 if __name__ == "__main__":
-    user_input = "馬英九當總統的時候有簽訂ECFA，賴清德上街頭抗議，真的嗎？"
+    user_input = "今天是國家防災演練日，早上9時21分進行全國地震速報測試、9時30分沿海地區海嘯警報測試、上午10時59分各電視台與廣播電台切換，播放重大災害緊急警報。請民眾收到警報勿驚慌"
 
-    check_points_data = get_check_points(user_input, media_name="Chiming")
+    converted_text = date_noun_converter(user_input)
+
+    check_points_data = get_check_points(converted_text, media_name="Chiming")
     if check_points_data["Result"] == "Y":
         check_points = check_points_data["ResultData"]["check_points"]
     else:
         check_points = None
         print("[Info] 查核點 API 失敗")
 
-    resources = es_resources(user_input)
-
-    # print(">>> 社稿+事實查核中心報告：")
-    # print(resources)
+    resources = es_resources(converted_text)
 
     async def main():
         result = await run_interactive_fact_check(
-            user_input=user_input,
+            user_input=converted_text,
             check_points=check_points,
             resources=resources,
             max_rounds=3
@@ -590,6 +585,3 @@ if __name__ == "__main__":
         print(f"總互動輪數: {result['total_rounds']}")
 
     asyncio.run(main())
-
-
-
